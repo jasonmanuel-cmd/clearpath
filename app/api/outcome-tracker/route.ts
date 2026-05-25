@@ -1,21 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { processOutcome } from '@/lib/agents/learning-agent'
 import type { DisputeType, Bureau, OutcomeResult } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
   try {
+    // Verify authenticated user
+    const authClient = await createClient()
+    const { data: { user } } = await authClient.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { dispatchRecordId, result, scoreImpactPoints, notes } = await req.json()
     const supabase = createServiceClient()
 
     const { data: dispatch } = await supabase
       .from('dispatch_records')
-      .select('*, letters(dispute_item_id, content)')
+      .select('*, letters(dispute_item_id, content, dispute_items(cases(user_id)))')
       .eq('id', dispatchRecordId)
       .single()
 
     if (!dispatch) {
       return NextResponse.json({ error: 'Dispatch record not found' }, { status: 404 })
+    }
+
+    // Verify the dispatch belongs to the authenticated user
+    const disputeItem = Array.isArray(dispatch.letters?.dispute_items)
+      ? dispatch.letters?.dispute_items[0]
+      : dispatch.letters?.dispute_items
+    if (disputeItem?.cases?.user_id !== user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     await supabase

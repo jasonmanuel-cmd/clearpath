@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { squareClient, LOCATION_ID, PLAN_IDS, PlanKey } from '@/lib/square/client'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 
 export async function POST(req: NextRequest) {
   try {
+    // Verify authenticated user
+    const authClient = await createClient()
+    const { data: { user } } = await authClient.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { planKey, sourceId, userId, email } = await req.json() as {
       planKey: PlanKey; sourceId: string; userId: string; email: string
+    }
+
+    // Verify the userId matches the authenticated user
+    if (userId !== user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     if (!PLAN_IDS[planKey]) {

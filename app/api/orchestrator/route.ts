@@ -8,9 +8,16 @@ import type { Bureau } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
   try {
-    const { caseId, userId } = await req.json()
+    const body = await req.json()
+    const { caseId, userId: bodyUserId } = body
+
+    if (!caseId) {
+      return NextResponse.json({ error: 'caseId is required' }, { status: 400 })
+    }
+
     const supabase = createServiceClient()
 
+    // Fetch the case and verify ownership
     const { data: caseData, error: caseError } = await supabase
       .from('cases')
       .select('*, profiles(full_name, email)')
@@ -19,6 +26,11 @@ export async function POST(req: NextRequest) {
 
     if (caseError || !caseData) {
       return NextResponse.json({ error: 'Case not found' }, { status: 404 })
+    }
+
+    // If bodyUserId provided, verify it matches the case owner
+    if (bodyUserId && bodyUserId !== caseData.user_id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     if (!caseData.credit_report_text) {
@@ -65,9 +77,11 @@ export async function POST(req: NextRequest) {
     const consumerName = caseData.profiles?.full_name || 'Consumer'
     const consumer = {
       name: consumerName,
-      address: '123 Main St, City, ST 00000',
-      ssn_last4: 'XXXX',
-      dob: 'XX/XX/XXXX',
+      // TODO: Collect real consumer data (address, SSN last 4, DOB) in upload flow
+      // Currently using placeholders — letters will need these filled in before mailing
+      address: '[Your Address]',
+      ssn_last4: '[SSN Last 4]',
+      dob: '[Date of Birth]',
     }
 
     // Step 4: Run specialist agents + generate letters (sorted by processing order)

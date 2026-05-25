@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { runEscalationBot } from '@/lib/agents/escalation-bot'
 import type { OrchestratorItem } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
   try {
+    // Verify authenticated user
+    const authClient = await createClient()
+    const { data: { user } } = await authClient.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { disputeItemId } = await req.json()
     const supabase = createServiceClient()
 
@@ -16,6 +23,11 @@ export async function POST(req: NextRequest) {
 
     if (!item) {
       return NextResponse.json({ error: 'Dispute item not found' }, { status: 404 })
+    }
+
+    // Verify the case belongs to the authenticated user
+    if (item.cases?.user_id !== user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const { data: dispatch } = await supabase
